@@ -1,15 +1,24 @@
-# WatermarkRemover-AI PortableApps Builder Kit — b1r1
+# WatermarkRemover-AI PortableApps Builder Kit — b1r2
 
 Independent community builder for **D-Ogi/WatermarkRemover-AI**. Mode is **PORTABLEAPPS only**, backend defaults to **CPU-only**, and installer engine is **custom-nsis**. This is **not** a PortableApps.com certified/official installer.
 
 The builder is source code and workflows, **not** the ~470 MiB application binary. When you run its GitHub Actions workflow, it downloads the real official stable Windows release, verifies the release's `SHA256SUMS.txt`, checks the tagged source/commit, compiles `WatermarkRemoverAIPortable.exe` from the included readable C# source, stages the complete PortableApps folder, validates and ZIPs it, restores pristine installer input from the validated ZIP after runtime checks, invokes `vhick/Portable-Package-Builder@v1.0.0`, and publishes through `vhick/portable-release-publisher@v1.1.1`. No upstream fork or local programming tools are required.
+
+
+## b1r2: fix verified NSIS MAX_PATH packaging failure
+
+The b1r1 Windows build successfully validated the official app, compiled launcher, ZIP and Qt `--check`, but NSIS could not open the source PySide6 DLL at a **261-character** location under the long GitHub workspace. This is an **installer build-path problem**, not a broken PySide6 DLL. b1r2 restores ZIP content into a short `$RUNNER_TEMP\w\WatermarkRemoverAIPortable` staging directory and validates the maximum absolute source path (245-character safety budget) before passing that directory to the **unchanged** shared Package Builder v1.0.0. Both workflow variants have the fix; app binaries are not removed or changed.
+
+**Fastest recovery if you already ran b1r1:** after committing this new kit, run **Actions > WatermarkRemover-AI - Installer Only from Validated ZIP** and enter the previous ZIP-only tag, such as `portable-wmrai-v0.68.0-553b9bcfc2-b1r1-ziponly`. This will verify and reuse your existing b1r1 application ZIP and publish its matching b1r1 installer; it does not rebuild or upgrade the b1r1 application package. The new full-build workflow uses b1r2 package identity for future fresh builds. The installer-only workflow also accepts b1r2 ZIP-only releases should they be needed.
+
+**Why not simply enable long paths?** NSIS `File /r` has known compiler-side MAX_PATH limitations. Short staging is a narrow, predictable fix requiring no Windows global policy or registry modifications. Deep installation destinations still need real Windows tests, because the downloaded application's own directory hierarchy is long. This b1r2 kit is statically tested locally; GitHub Actions/installer execution remain unverified until your next run.
 
 ## Fast start with GitHub Desktop
 
 1. In **GitHub Desktop**, choose **File > New repository**. Name it `WatermarkRemoverAI-PortableApps-Builder`. This must be a **new builder repo**, not a fork of D-Ogi's repo. Choose private or public; a private release stays in a private repository. GitHub Windows runner usage is charged under the current account rules.
 2. Click **Create repository**, then **Repository > Show in Explorer**.
 3. Open the builder-kit ZIP that accompanies this README. **Extract its contents into the new repository folder**, so `.github/workflows/build-portableapps.yml` is directly under the repository root. Do not insert an extra nested builder-kit folder. Windows Explorer might hide the `.github` directory; it must be included.
-4. Return to GitHub Desktop. Type a summary such as `Add WatermarkRemover-AI PortableApps builder b1r1`, click **Commit to main**, and **Publish repository**. Choose visibility before publishing.
+4. Return to GitHub Desktop. Type a summary such as `Add WatermarkRemover-AI PortableApps builder b1r2`, click **Commit to main**, and **Publish repository**. Choose visibility before publishing.
 5. Open your GitHub builder repository in your browser. Go to **Actions** > **WatermarkRemover-AI - Build PortableApps ZIP and Installer** > **Run workflow**. Leave `upstream_version=latest` or enter a verified stable version such as `0.68.0`. Leave desktop check enabled for the strongest available headless validation.
 6. After it finishes, click the workflow run. Each step shows success/failure and its logs. A failure never proves a portable package exists.
 7. If all steps pass, open your builder repository's **Releases** section. Download both `WatermarkRemoverAIPortable_...zip` and its `...paf.exe` installer. The publisher also generates `SHA256SUMS.txt`.
@@ -44,11 +53,11 @@ WatermarkRemoverAIPortable/
 ### Two workflows
 
 - **Build PortableApps ZIP and Installer** — downloads and checks the upstream CPU-only archive, compiles the root launcher, validates, packages and publishes. Automatically skips work if a complete release already exists with the same upstream commit and builder revision. If shared NSIS packaging fails after ZIP validation, publishes the validated ZIP **alone** under a clearly labeled `-ziponly` release and marks the run failed.
-- **Installer Only from Validated ZIP** — retry packaging from an earlier `-ziponly` release in **this same builder repository**. Enter that exact release tag. Verifies the original ZIP against its `SHA256SUMS.txt`, verifies internal provenance, reuses the unchanged ZIP, builds a new installer via the same pinned action and publishes a full release. **No upstream rebuild**.
+- **Installer Only from Validated ZIP** — retry packaging from an earlier b1r1 or b1r2 `-ziponly` release in **this same builder repository**. Enter that exact release tag. Verifies the original ZIP against its `SHA256SUMS.txt`, verifies internal provenance, reuses the unchanged ZIP, builds a new installer via the same pinned action and publishes a full release. **No upstream rebuild**.
 
 ### Release identity
 
-Full release tags follow `portable-wmrai-v{upstream_version}-{upstream_commit_first_10}-b1r1`. The ZIP basename is `WatermarkRemoverAIPortable_{version}_cpu_b1r1.zip`; installer filename comes from the **actual shared Package Builder** and ends with `.paf.exe`. Exact SHA-256 hashes are available only after that particular run and are never prefilled in this kit.
+Fresh b1r2 full release tags follow `portable-wmrai-v{upstream_version}-{upstream_commit_first_10}-b1r2`; installer-only recovery retains the original b1r1 tag for a reused b1r1 ZIP. The ZIP basename is `WatermarkRemoverAIPortable_{version}_cpu_b1r2.zip`; installer filename comes from the **actual shared Package Builder** and ends with `.paf.exe`. Exact SHA-256 hashes are available only after that particular run and are never prefilled in this kit.
 
 The upstream stable release resolver uses numeric `X.Y.Z` ordering and rejects beta/RC/nightly, expected 404 is handled, and genuine API errors fail. Official upstream release asset checksums are mandatory. `identity.json` records the release/tag, full source commit, official ZIP hash, Python runtime manifest identity, requirement hashes and kit revision. Staging requires the upstream ZIP's `build-info.json` to agree with the source tag and commit.
 

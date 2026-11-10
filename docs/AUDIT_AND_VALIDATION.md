@@ -1,4 +1,4 @@
-# Source audit, architecture, and verification — b1r1
+# Source audit, architecture, and verification — b1r2
 
 ## Resolved mode
 

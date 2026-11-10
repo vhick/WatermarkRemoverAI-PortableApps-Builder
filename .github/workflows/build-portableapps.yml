@@ -49,7 +49,7 @@ jobs:
           PYTHONUTF8: '1'
           UPSTREAM_VERSION: ${{ inputs.upstream_version }}
         run: |
-          python scripts/resolve_official.py --version $env:UPSTREAM_VERSION --work work --revision b1r1
+          python scripts/resolve_official.py --version $env:UPSTREAM_VERSION --work work --revision b1r2
           if ($LASTEXITCODE -ne 0) { throw 'Upstream release validation failed' }
       - name: Create genuine compiled root launcher and independently packaged ZIP
         if: steps.resolve.outputs.skip != 'true'
@@ -58,7 +58,7 @@ jobs:
           python scripts/stage.py --work work --dist dist
           if ($LASTEXITCODE -ne 0) { throw 'PortableApps staging failed' }
           $version = '${{ steps.resolve.outputs.version }}'
-          python scripts/validate.py --stage work/stage/WatermarkRemoverAIPortable --zip "dist/WatermarkRemoverAIPortable_${version}_cpu_b1r1.zip" --version $version
+          python scripts/validate.py --stage work/stage/WatermarkRemoverAIPortable --zip "dist/WatermarkRemoverAIPortable_${version}_cpu_b1r2.zip" --version $version
           if ($LASTEXITCODE -ne 0) { throw 'Independent ZIP validation failed' }
       - name: Validate actual compiled launcher against controlled Windows fixture
         if: steps.resolve.outputs.skip != 'true'
@@ -72,24 +72,26 @@ jobs:
           $env:PYTHONUTF8 = '1'
           python scripts/check_app_windows.py --stage work/stage/WatermarkRemoverAIPortable
           if ($LASTEXITCODE -ne 0) { throw 'Real application self-check failed' }
-      - name: Restore pristine install-stage from validated original ZIP
+      - name: Restore pristine ZIP to short NSIS-safe install-stage and validate paths
         if: steps.resolve.outputs.skip != 'true'
         run: |
           $env:PYTHONUTF8 = '1'
           $version = '${{ steps.resolve.outputs.version }}'
-          python scripts/restore_validated_stage.py --zip "dist/WatermarkRemoverAIPortable_${version}_cpu_b1r1.zip" --destination work/install-stage --version $version
+          python scripts/restore_validated_stage.py --zip "dist/WatermarkRemoverAIPortable_${version}_cpu_b1r2.zip" --destination "$env:RUNNER_TEMP\w" --version $version
           if ($LASTEXITCODE -ne 0) { throw 'Could not restore pristine validated stage' }
+          python scripts/check_nsis_paths.py --source "$env:RUNNER_TEMP\w\WatermarkRemoverAIPortable" --max-length 245
+          if ($LASTEXITCODE -ne 0) { throw 'Installer input has paths too deep for NSIS' }
       - name: Generate installer through verified pinned shared Package Builder
         if: steps.resolve.outputs.skip != 'true'
         id: pack
         continue-on-error: true
         uses: vhick/Portable-Package-Builder@v1.0.0
         with:
-          source-dir: work/install-stage/WatermarkRemoverAIPortable
+          source-dir: ${{ runner.temp }}\w\WatermarkRemoverAIPortable
           output-dir: dist/installers
           engine: custom-nsis
           running-exe: 'App\WatermarkRemoverAI\WatermarkRemover-AI.exe'
-          package-revision: b1r1
+          package-revision: b1r2
           timeout-seconds: '1800'
       - name: Independently validate generated installer PE
         if: steps.resolve.outputs.skip != 'true' && steps.pack.outcome == 'success'
@@ -107,7 +109,7 @@ jobs:
             dist/*.zip
             dist/installers/*.paf.exe
           tag: ${{ steps.resolve.outputs.tag }}
-          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.resolve.outputs.version }} (b1r1)'
+          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.resolve.outputs.version }} (b1r2)'
           keep-releases: '3'
           prune: 'false'
           dry-run: 'true'
@@ -119,7 +121,7 @@ jobs:
             dist/*.zip
             dist/installers/*.paf.exe
           tag: ${{ steps.resolve.outputs.tag }}
-          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.resolve.outputs.version }} (b1r1)'
+          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.resolve.outputs.version }} (b1r2)'
           keep-releases: '3'
           prune: 'false'
           dry-run: 'false'

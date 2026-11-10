@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       zip_only_release_tag:
-        description: 'Exact previously published ZIP-only release tag (ending -b1r1-ziponly)'
+        description: 'Exact previously published ZIP-only release tag (ending -b1r1-ziponly or -b1r2-ziponly)'
         type: string
         required: true
 
@@ -39,17 +39,19 @@ jobs:
           PYTHONUTF8: '1'
           REUSE_TAG: ${{ inputs.zip_only_release_tag }}
         run: |
-          python scripts/repackage_from_ziponly.py --source-tag $env:REUSE_TAG --work work --dist dist
+          python scripts/repackage_from_ziponly.py --source-tag $env:REUSE_TAG --work work --dist dist --stage-destination "$env:RUNNER_TEMP\w"
           if ($LASTEXITCODE -ne 0) { throw 'Original ZIP provenance/checksum validation failed' }
+          python scripts/check_nsis_paths.py --source "$env:RUNNER_TEMP\w\WatermarkRemoverAIPortable" --max-length 245
+          if ($LASTEXITCODE -ne 0) { throw 'Installer input has paths too deep for NSIS' }
       - name: Build installer using pinned Package Builder
         id: pack
         uses: vhick/Portable-Package-Builder@v1.0.0
         with:
-          source-dir: work/stage/WatermarkRemoverAIPortable
+          source-dir: ${{ runner.temp }}\w\WatermarkRemoverAIPortable
           output-dir: dist/installers
           engine: custom-nsis
           running-exe: 'App\WatermarkRemoverAI\WatermarkRemover-AI.exe'
-          package-revision: b1r1
+          package-revision: ${{ steps.reuse.outputs.revision }}
           timeout-seconds: '1800'
       - name: Verify installer PE
         run: |
@@ -63,7 +65,7 @@ jobs:
             dist/*.zip
             dist/installers/*.paf.exe
           tag: ${{ steps.reuse.outputs.target_tag }}
-          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.reuse.outputs.version }} (b1r1)'
+          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.reuse.outputs.version }} (${{ steps.reuse.outputs.revision }})'
           keep-releases: '3'
           prune: 'false'
           dry-run: 'true'
@@ -74,7 +76,7 @@ jobs:
             dist/*.zip
             dist/installers/*.paf.exe
           tag: ${{ steps.reuse.outputs.target_tag }}
-          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.reuse.outputs.version }} (b1r1)'
+          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.reuse.outputs.version }} (${{ steps.reuse.outputs.revision }})'
           keep-releases: '3'
           prune: 'false'
           dry-run: 'false'

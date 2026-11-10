@@ -13,7 +13,7 @@ from resolve_official import fetch_json, download, sha256
 from stage import safe_extract, APP_NAME
 from validate import validate_stage, validate_zip
 
-TAG_RE = re.compile(r'^portable-wmrai-v(\d+\.\d+\.\d+)-([0-9a-f]{10})-b1r1-ziponly$')
+TAG_RE = re.compile(r'^portable-wmrai-v(\d+\.\d+\.\d+)-([0-9a-f]{10})-(b1r1|b1r2)-ziponly$')
 
 def out(k,v):
     with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8', newline='\n') as f:
@@ -24,11 +24,12 @@ def main():
     p.add_argument('--source-tag',required=True)
     p.add_argument('--work',type=Path,required=True)
     p.add_argument('--dist',type=Path,required=True)
+    p.add_argument('--stage-destination',type=Path,required=True, help='Short, fresh, temporary NSIS-safe staging base')
     a=p.parse_args()
     tagmatch=TAG_RE.fullmatch(a.source_tag)
     if not tagmatch:
-        raise RuntimeError('Only own prior b1r1 ZIP-only release tags can be reused')
-    version,prefix=tagmatch.groups()
+        raise RuntimeError('Only own prior b1r1/b1r2 ZIP-only release tags can be reused')
+    version,prefix,revision=tagmatch.groups()
     repository=os.environ.get('GITHUB_REPOSITORY','')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',repository):
         raise RuntimeError('GitHub repository identity missing or invalid')
@@ -52,14 +53,15 @@ def main():
     package=dist/zips[0]
     download(f"https://api.github.com/repos/{repository}/releases/assets/{assets[zips[0]]['id']}", package, assets[zips[0]].get('size'), auth_asset=True)
     if sha256(package)!=expected[0]:raise RuntimeError('Previously published ZIP SHA256 mismatch')
-    stage=safe_extract(package, work/'stage',APP_NAME)
+    stage=safe_extract(package, a.stage_destination, APP_NAME)
     identity=json.loads((stage/'Other/Source/upstream-build-identity.json').read_text(encoding='utf-8'))
-    if identity.get('version')!=version or not identity.get('commit','').startswith(prefix) or identity.get('package_revision')!='b1r1':
+    if identity.get('version')!=version or not identity.get('commit','').startswith(prefix) or identity.get('package_revision')!=revision:
         raise RuntimeError('Previously published package identity differs from requested release tag')
     validate_stage(stage,version)
     validate_zip(package,version)
     out('target_tag',a.source_tag.removesuffix('-ziponly'))
     out('version',version)
+    out('revision',revision)
     print('VALIDATED: trusted, unchanged ZIP-only release reused for installer retry')
 
 if __name__=='__main__':

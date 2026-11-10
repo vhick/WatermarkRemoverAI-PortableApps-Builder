@@ -12,7 +12,7 @@
 | Models fail | Open Models > Download / Retry. Check available space, HTTPS connectivity to GitHub and Hugging Face, and any antivirus/network controls. Keep partial models under Data; never delete user downloads blindly. |
 | Silent output videos | Upstream requires FFmpeg on PATH to preserve audio. Supply an approved copy separately; do not assume the builder includes it. |
 | App writes unexpected host state | Identify the exact writer with Process Monitor or reproducible before/after snapshots; differentiate Qt/OS caches from application files. Keep existing data; do not bulk-delete AppData or registry branches. |
-| Installer generation fails | Main workflow marks the installer failed but publishes a SHA-validated ZIP under a `-ziponly` tag when possible. Use **Installer Only from Validated ZIP** with that exact tag to retry the shared NSIS packaging stage without rebuilding/downloads from upstream. |
+| Installer generation fails | For b1r1 `File: failed opening file` with PySide6/Qt, the failing path was 261 characters; update to builder b1r2 and use installer-only with the pre-existing ZIP-only tag. A short `$RUNNER_TEMP\w` source is used by the fixed workflow. Never delete Qt DLLs. Main workflow marks the installer failed but publishes a SHA-validated ZIP under a `-ziponly` tag when possible. Use **Installer Only from Validated ZIP** with that exact tag to retry the shared NSIS packaging stage without rebuilding/downloads from upstream. |
 | Installer won't upgrade | Close the portable app completely, back up `Data`, confirm AppID matches. If `.__UPB_Backup` or `.__UPB_Stage` exists after a failed upgrade, inspect the backed-up files; do not remove the folder casually. |
 | Portable folder moved | App caches are resolved relative to the root at launch, but media input/output choices saved in `Data/ui.yml` can be absolute; re-select them after relocation. |
 | File cannot be overwritten | Windows locks active binaries. Close all related app windows/workers. Do not force-delete running executable files or change permissions of unrelated profiles. |
@@ -29,3 +29,7 @@
 ## Commit summary for initial upload
 
 `Build D-Ogi WatermarkRemover-AI PortableApps b1r1: verified CPU releases, compiled launcher, portable model/profile paths, source/ZIP checks, Windows runtime fixture, pinned NSIS installer and publisher, ZIP-only recovery, packaging-only workflow`
+
+## b1r2 repair commit summary
+
+`Fix NSIS MAX_PATH failure: restore verified ZIP to short runner-temp stage, preflight all input paths, and support packaging-only recovery of existing b1r1 ZIP-only releases`

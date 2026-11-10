@@ -13,7 +13,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 APP_NAME = "WatermarkRemoverAIPortable"
 APP_DIR = "WatermarkRemoverAI"
-REV = "b1r1"
+REV = "b1r2"
 
 
 def fail(msg):

@@ -12,7 +12,7 @@ ACTIONS = [
 ]
 for repo, tag, input_names, output_names in ACTIONS:
     raw = f"https://raw.githubusercontent.com/{repo}/{tag}/action.yml"
-    with urlopen(Request(raw, headers={"User-Agent": "wmrai-builder-b1r1"}), timeout=40) as stream:
+    with urlopen(Request(raw, headers={"User-Agent": "wmrai-builder-b1r2"}), timeout=40) as stream:
         text = stream.read().decode("utf-8-sig")
     # Exact field names at column two (not comments, descriptions or example uses).
     ins = set(re.findall(r"^  ([\w-]+):\s*$", text.split("inputs:", 1)[1].split("outputs:", 1)[0].split("runs:", 1)[0], re.M))

@@ -23,7 +23,7 @@ STABLE = re.compile(r"^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
 def request(url, *, api=False, asset=False):
-    headers = {"User-Agent": "WatermarkRemoverAI-PortableApps-Builder-b1r1", "Accept": "application/vnd.github+json" if api else "application/octet-stream"}
+    headers = {"User-Agent": "WatermarkRemoverAI-PortableApps-Builder-b1r2", "Accept": "application/vnd.github+json" if api else "application/octet-stream"}
     token = os.environ.get("GITHUB_TOKEN") if (api or asset) else None
     if token:
         headers["Authorization"] = "Bearer " + token
@@ -125,7 +125,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--version", default="latest")
     p.add_argument("--work", type=Path, required=True)
-    p.add_argument("--revision", default="b1r1")
+    p.add_argument("--revision", default="b1r2")
     args = p.parse_args()
     work = args.work.resolve()
     work.mkdir(parents=True, exist_ok=True)
