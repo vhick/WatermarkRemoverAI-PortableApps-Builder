@@ -1,0 +1,80 @@
+name: WatermarkRemover-AI - Installer Only from Validated ZIP
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip_only_release_tag:
+        description: 'Exact previously published ZIP-only release tag (ending -b1r1-ziponly)'
+        type: string
+        required: true
+
+permissions:
+  contents: write
+concurrency:
+  group: wmrai-portableapps-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: windows-2025
+    timeout-minutes: 50
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout builder
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check pinned actions and self-tests
+        run: |
+          $env:PYTHONUTF8 = '1'
+          python -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Self-tests failed' }
+          python scripts/check_actions.py
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned action interface failed' }
+      - name: Download and verify unchanged ZIP-only release
+        id: reuse
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHONUTF8: '1'
+          REUSE_TAG: ${{ inputs.zip_only_release_tag }}
+        run: |
+          python scripts/repackage_from_ziponly.py --source-tag $env:REUSE_TAG --work work --dist dist
+          if ($LASTEXITCODE -ne 0) { throw 'Original ZIP provenance/checksum validation failed' }
+      - name: Build installer using pinned Package Builder
+        id: pack
+        uses: vhick/Portable-Package-Builder@v1.0.0
+        with:
+          source-dir: work/stage/WatermarkRemoverAIPortable
+          output-dir: dist/installers
+          engine: custom-nsis
+          running-exe: 'App\WatermarkRemoverAI\WatermarkRemover-AI.exe'
+          package-revision: b1r1
+          timeout-seconds: '1800'
+      - name: Verify installer PE
+        run: |
+          $env:PYTHONUTF8 = '1'
+          python scripts/validate.py --installer '${{ steps.pack.outputs.installer-file }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Installer validation failed' }
+      - name: Release publisher dry-run
+        uses: vhick/portable-release-publisher@v1.1.1
+        with:
+          files: |
+            dist/*.zip
+            dist/installers/*.paf.exe
+          tag: ${{ steps.reuse.outputs.target_tag }}
+          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.reuse.outputs.version }} (b1r1)'
+          keep-releases: '3'
+          prune: 'false'
+          dry-run: 'true'
+      - name: Publish unchanged original ZIP and validated installer
+        uses: vhick/portable-release-publisher@v1.1.1
+        with:
+          files: |
+            dist/*.zip
+            dist/installers/*.paf.exe
+          tag: ${{ steps.reuse.outputs.target_tag }}
+          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.reuse.outputs.version }} (b1r1)'
+          keep-releases: '3'
+          prune: 'false'
+          dry-run: 'false'

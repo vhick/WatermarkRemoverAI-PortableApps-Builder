@@ -1,0 +1,149 @@
+name: WatermarkRemover-AI - Build PortableApps ZIP and Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_version:
+        description: 'Stable upstream version, e.g. 0.68.0; latest = newest stable release'
+        required: true
+        default: 'latest'
+        type: string
+      run_desktop_check:
+        description: 'Run real Qt desktop --check on Windows hosted runner'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wmrai-portableapps-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  portableapps:
+    name: Official CPU package -> compiled launcher -> ZIP -> NSIS -> release
+    runs-on: windows-2025
+    timeout-minutes: 85
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout standalone builder repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check source scripts and pinned shared action interfaces
+        shell: pwsh
+        run: |
+          $env:PYTHONUTF8 = '1'
+          python -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Builder self-tests failed' }
+          python scripts/check_actions.py
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned shared action contract changed' }
+      - name: Resolve stable version and verify official upstream CPU archive
+        id: resolve
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PYTHONUTF8: '1'
+          UPSTREAM_VERSION: ${{ inputs.upstream_version }}
+        run: |
+          python scripts/resolve_official.py --version $env:UPSTREAM_VERSION --work work --revision b1r1
+          if ($LASTEXITCODE -ne 0) { throw 'Upstream release validation failed' }
+      - name: Create genuine compiled root launcher and independently packaged ZIP
+        if: steps.resolve.outputs.skip != 'true'
+        run: |
+          $env:PYTHONUTF8 = '1'
+          python scripts/stage.py --work work --dist dist
+          if ($LASTEXITCODE -ne 0) { throw 'PortableApps staging failed' }
+          $version = '${{ steps.resolve.outputs.version }}'
+          python scripts/validate.py --stage work/stage/WatermarkRemoverAIPortable --zip "dist/WatermarkRemoverAIPortable_${version}_cpu_b1r1.zip" --version $version
+          if ($LASTEXITCODE -ne 0) { throw 'Independent ZIP validation failed' }
+      - name: Validate actual compiled launcher against controlled Windows fixture
+        if: steps.resolve.outputs.skip != 'true'
+        run: |
+          $env:PYTHONUTF8 = '1'
+          python scripts/smoke_windows.py
+          if ($LASTEXITCODE -ne 0) { throw 'Compiled launcher smoke test failed' }
+      - name: Check actual Qt desktop UI/bridge through portable root launcher
+        if: steps.resolve.outputs.skip != 'true' && inputs.run_desktop_check
+        run: |
+          $env:PYTHONUTF8 = '1'
+          python scripts/check_app_windows.py --stage work/stage/WatermarkRemoverAIPortable
+          if ($LASTEXITCODE -ne 0) { throw 'Real application self-check failed' }
+      - name: Restore pristine install-stage from validated original ZIP
+        if: steps.resolve.outputs.skip != 'true'
+        run: |
+          $env:PYTHONUTF8 = '1'
+          $version = '${{ steps.resolve.outputs.version }}'
+          python scripts/restore_validated_stage.py --zip "dist/WatermarkRemoverAIPortable_${version}_cpu_b1r1.zip" --destination work/install-stage --version $version
+          if ($LASTEXITCODE -ne 0) { throw 'Could not restore pristine validated stage' }
+      - name: Generate installer through verified pinned shared Package Builder
+        if: steps.resolve.outputs.skip != 'true'
+        id: pack
+        continue-on-error: true
+        uses: vhick/Portable-Package-Builder@v1.0.0
+        with:
+          source-dir: work/install-stage/WatermarkRemoverAIPortable
+          output-dir: dist/installers
+          engine: custom-nsis
+          running-exe: 'App\WatermarkRemoverAI\WatermarkRemover-AI.exe'
+          package-revision: b1r1
+          timeout-seconds: '1800'
+      - name: Independently validate generated installer PE
+        if: steps.resolve.outputs.skip != 'true' && steps.pack.outcome == 'success'
+        id: installercheck
+        continue-on-error: true
+        run: |
+          $env:PYTHONUTF8 = '1'
+          python scripts/validate.py --installer '${{ steps.pack.outputs.installer-file }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Installer PE verification failed' }
+      - name: Publisher dry-run for validated ZIP and installer
+        if: steps.resolve.outputs.skip != 'true' && steps.pack.outcome == 'success' && steps.installercheck.outcome == 'success'
+        uses: vhick/portable-release-publisher@v1.1.1
+        with:
+          files: |
+            dist/*.zip
+            dist/installers/*.paf.exe
+          tag: ${{ steps.resolve.outputs.tag }}
+          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.resolve.outputs.version }} (b1r1)'
+          keep-releases: '3'
+          prune: 'false'
+          dry-run: 'true'
+      - name: Publish validated ZIP and installer
+        if: steps.resolve.outputs.skip != 'true' && steps.pack.outcome == 'success' && steps.installercheck.outcome == 'success'
+        uses: vhick/portable-release-publisher@v1.1.1
+        with:
+          files: |
+            dist/*.zip
+            dist/installers/*.paf.exe
+          tag: ${{ steps.resolve.outputs.tag }}
+          release-title: 'WatermarkRemover-AI Portable CPU ${{ steps.resolve.outputs.version }} (b1r1)'
+          keep-releases: '3'
+          prune: 'false'
+          dry-run: 'false'
+      - name: Publisher dry-run for ZIP-only recovery if installer failed
+        if: steps.resolve.outputs.skip != 'true' && (steps.pack.outcome != 'success' || steps.installercheck.outcome != 'success')
+        uses: vhick/portable-release-publisher@v1.1.1
+        with:
+          files: dist/*.zip
+          tag: ${{ steps.resolve.outputs.tag }}-ziponly
+          release-title: 'WatermarkRemover-AI Portable CPU ZIP only - installer not validated'
+          keep-releases: '3'
+          prune: 'false'
+          dry-run: 'true'
+      - name: Preserve validated ZIP as ZIP-only release after installer failure
+        if: steps.resolve.outputs.skip != 'true' && (steps.pack.outcome != 'success' || steps.installercheck.outcome != 'success')
+        uses: vhick/portable-release-publisher@v1.1.1
+        with:
+          files: dist/*.zip
+          tag: ${{ steps.resolve.outputs.tag }}-ziponly
+          release-title: 'WatermarkRemover-AI Portable CPU ZIP only - installer not validated'
+          keep-releases: '3'
+          prune: 'false'
+          dry-run: 'false'
+      - name: Mark installer failure accurately in workflow status
+        if: steps.resolve.outputs.skip != 'true' && (steps.pack.outcome != 'success' || steps.installercheck.outcome != 'success')
+        run: |
+          throw 'Installer FAILED or was not independently validated. The validated ZIP has its own ZIP-only release.'

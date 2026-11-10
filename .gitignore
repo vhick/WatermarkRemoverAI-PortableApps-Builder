@@ -1,0 +1,8 @@
+work/
+dist/
+*.pyc
+__pycache__/
+.vs/
+*.paf.exe
+*.zip
+!tests/fixtures/*.zip
